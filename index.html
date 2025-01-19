@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BESTDAD Wordle-Style Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* Simple Reset/Defaults */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #fafafa;
+      color: #333;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+
+    #instructions {
+      margin-bottom: 20px;
+      text-align: center;
+      max-width: 600px;
+    }
+
+    /* Game Board Container */
+    #board {
+      display: grid;
+      grid-template-rows: repeat(7, 50px);
+      grid-gap: 5px;
+      margin-bottom: 20px;
+    }
+    /* Each row will hold 7 squares (one for each letter) */
+    .board-row {
+      display: grid;
+      grid-template-columns: repeat(7, 50px);
+      grid-gap: 5px;
+    }
+
+    .tile {
+      width: 50px;
+      height: 50px;
+      border: 2px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      background-color: #fff;
+    }
+
+    /* Colors for correctness indication */
+    .correct {
+      background-color: #6aaa64; /* green */
+      border-color: #6aaa64;
+      color: #fff;
+    }
+    .present {
+      background-color: #c9b458; /* yellow */
+      border-color: #c9b458;
+      color: #fff;
+    }
+    .absent {
+      background-color: #787c7e; /* gray */
+      border-color: #787c7e;
+      color: #fff;
+    }
+
+    /* Keyboard styling */
+    #keyboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .key-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 5px;
+    }
+
+    .key {
+      margin: 3px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 4px;
+      background-color: #d3d6da;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      font-size: 1rem;
+    }
+
+    .key.special {
+      background-color: #999;
+      color: #fff;
+    }
+
+    .key.correct {
+      background-color: #6aaa64 !important;
+      border-color: #6aaa64 !important;
+      color: #fff !important;
+    }
+
+    .key.present {
+      background-color: #c9b458 !important;
+      border-color: #c9b458 !important;
+      color: #fff !important;
+    }
+
+    .key.absent {
+      background-color: #787c7e !important;
+      border-color: #787c7e !important;
+      color: #fff !important;
+    }
+
+    /* Overlay for end-of-game messages */
+    #overlay {
+      position: fixed;
+      top: -100%; /* Hidden above the viewport */
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: top 1s ease;
+    }
+    /* Add this class to reveal the overlay */
+    #overlay.show {
+      top: 0;
+    }
+    #overlay-content {
+      text-align: center;
+      font-size: 1.5rem;
+      padding: 20px;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .tile {
+        width: 40px;
+        height: 40px;
+        font-size: 1.1rem;
+      }
+      #board {
+        grid-gap: 3px;
+      }
+      .board-row {
+        grid-template-columns: repeat(7, 40px);
+        grid-gap: 3px;
+      }
+      .key {
+        margin: 2px;
+        padding: 8px 10px;
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Happy 75th Birthday, Dad!</h1>
+  <div id="instructions">
+    <p>Guess the 7-letter word (or phrase 😏) in up to 7 tries</p>
+  </div>
+
+  <!-- Game Board -->
+  <div id="board"></div>
+
+  <!-- On-Screen Keyboard -->
+  <div id="keyboard"></div>
+
+  <div id="overlay">
+    <div id="overlay-content"></div>
+  </div>
+
+  <script>
+    // CONSTANTS
+    const solution = "BESTDAD";    // The secret word
+    const maxGuesses = 7;         // Number of guesses allowed
+    const wordLength = 7;         // Length of the word
+    const keyboardRows = [
+      ["Q","W","E","R","T","Y","U","I","O","P"],
+      ["A","S","D","F","G","H","J","K","L"],
+      ["Enter","Z","X","C","V","B","N","M","Del"]
+    ];
+
+    // GAME STATE
+    let currentGuess = "";
+    let currentRow = 0;
+    let gameOver = false;
+
+    // Build the board dynamically
+    function createBoard() {
+      const board = document.getElementById('board');
+      for (let i = 0; i < maxGuesses; i++) {
+        const row = document.createElement('div');
+        row.classList.add('board-row');
+        for (let j = 0; j < wordLength; j++) {
+          const tile = document.createElement('div');
+          tile.classList.add('tile');
+          tile.setAttribute('id', `tile-${i}-${j}`);
+          row.appendChild(tile);
+        }
+        board.appendChild(row);
+      }
+    }
+
+    // Build the on-screen keyboard
+    function createKeyboard() {
+      const keyboard = document.getElementById('keyboard');
+      keyboardRows.forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.classList.add('key-row');
+        row.forEach(key => {
+          const button = document.createElement('button');
+          button.textContent = key;
+          button.classList.add('key');
+          if (key === 'Enter' || key === 'Del') {
+            button.classList.add('special');
+          }
+          button.addEventListener('click', () => handleKeyInput(key));
+          rowDiv.appendChild(button);
+        });
+        keyboard.appendChild(rowDiv);
+      });
+    }
+
+    function handleKeyInput(key) {
+      if (gameOver) return;
+
+      if (key === 'Enter') {
+        // Submit current guess
+        if (currentGuess.length === wordLength) {
+          checkGuess();
+        } else {
+          alert("Not enough letters!");
+        }
+      } else if (key === 'Del') {
+        // Backspace
+        currentGuess = currentGuess.slice(0, -1);
+        updateBoard();
+      } else {
+        // Letter
+        if (currentGuess.length < wordLength) {
+          currentGuess += key;
+          updateBoard();
+        }
+      }
+    }
+
+    // Update the board tiles with current guess letters
+    function updateBoard() {
+      for (let i = 0; i < wordLength; i++) {
+        const tile = document.getElementById(`tile-${currentRow}-${i}`);
+        tile.textContent = currentGuess[i] ? currentGuess[i] : "";
+      }
+    }
+
+    // Check the guess against the solution
+    function checkGuess() {
+      const guess = currentGuess.toUpperCase();
+      const solutionArray = solution.split("");
+      const guessArray = guess.split("");
+
+      // Color assignment arrays
+      const tileColors = Array(wordLength).fill('absent');
+      const letterCount = {};
+
+      // Count letters in solution
+      for (let i = 0; i < wordLength; i++) {
+        const letter = solutionArray[i];
+        letterCount[letter] = (letterCount[letter] || 0) + 1;
+      }
+
+      // First pass: correct letters (green)
+      for (let i = 0; i < wordLength; i++) {
+        if (guessArray[i] === solutionArray[i]) {
+          tileColors[i] = 'correct';
+          letterCount[guessArray[i]] -= 1;
+        }
+      }
+
+      // Second pass: present letters (yellow)
+      for (let i = 0; i < wordLength; i++) {
+        if (tileColors[i] !== 'correct') {
+          const letter = guessArray[i];
+          if (letterCount[letter] && letterCount[letter] > 0) {
+            tileColors[i] = 'present';
+            letterCount[letter] -= 1;
+          }
+        }
+      }
+
+      // Update tile colors
+      for (let i = 0; i < wordLength; i++) {
+        const tile = document.getElementById(`tile-${currentRow}-${i}`);
+        tile.classList.add(tileColors[i]);
+        updateKeyboardColor(guessArray[i], tileColors[i]);
+      }
+
+      // Check for win or next guess
+      if (guess === solution) {
+        showOverlay("🎉Happy birthday Dad!🎉<br>Love you!<br>❤️ Ger");
+        gameOver = true;
+      } else {
+        currentRow++;
+        currentGuess = "";
+        if (currentRow === maxGuesses) {
+          gameOver = true;
+          showOverlay(`Out of guesses! The word was "${solution}".<br>'Cause you are.<br>Love you!<br>❤️ Ger`);
+        }
+      }
+    }
+
+    // Update the keyboard color for a letter
+    function updateKeyboardColor(letter, color) {
+      // Find the corresponding button
+      const buttons = document.querySelectorAll('.key');
+      buttons.forEach(btn => {
+        if (btn.textContent === letter) {
+          // If it's already green, don't downgrade it to yellow or gray
+          if (btn.classList.contains('correct')) return;
+          if (btn.classList.contains('present') && color !== 'correct') return;
+          btn.classList.remove('absent', 'present', 'correct');
+          btn.classList.add(color);
+        }
+      });
+    }
+
+    // Show an overlay from the top with a message
+    function showOverlay(message) {
+      const overlay = document.getElementById('overlay');
+      const overlayContent = document.getElementById('overlay-content');
+      overlayContent.innerHTML = message;
+      overlay.classList.add('show'); // triggers the CSS transition
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (gameOver) return;
+      // Letters a-z
+      if (/^[a-zA-Z]$/.test(e.key) && e.key.length === 1) {
+        handleKeyInput(e.key.toUpperCase());
+      } else if (e.key === 'Enter') {
+        handleKeyInput('Enter');
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        handleKeyInput('Del');
+      }
+    });
+
+    // Initialize game
+    createBoard();
+    createKeyboard();
+  </script>
+</body>
+</html>
